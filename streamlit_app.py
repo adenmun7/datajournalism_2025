@@ -130,8 +130,9 @@ st.markdown("---")
 
 # 3. heatmap
 st.header("2. 상호작용형 히트맵")
-# score_type_heatmap = st.radio("표시할 점수 선택 (히트맵)", ('zscore', '원본 감성점수(sentiment)'), key='heatmap_radio')
-score_column_heatmap = 'zscore' # if score_type_heatmap == 'zscore' else 'sentiment'
+
+# 'zscore'를 기본값으로 사용
+score_column_heatmap = 'zscore'
 
 pivot_df_heatmap = sentiment_df.pivot_table(index='topic', columns='outlet', values=score_column_heatmap, aggfunc='mean')
 fig_heatmap = px.imshow(
@@ -164,8 +165,8 @@ st.markdown("---")
 # 4. graph1
 st.header("3. 주제별 언론사 논조 분포 비교")
 
-# score_type_line1 = st.radio("표시할 점수 선택 (언론사 비교)", ('zscore', '원본 감성점수(sentiment)'), key='line1_radio')
-score_column_line1 = 'zscore' # if score_type_line1 == 'zscore' else 'sentiment'
+# 'zscore'를 기본값으로 사용
+score_column_line1 = 'zscore'
 
 topic_to_compare = st.selectbox("비교할 주제를 선택하세요:", sentiment_df['topic'].unique())
 
