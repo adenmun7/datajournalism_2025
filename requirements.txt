@@ -1,6 +1,6 @@
 streamlit
 pandas
 numpy
-plotly
+plotly==5.18.0
 wordcloud
-streamlit-plotly-events
+streamlit-plotly-events==0.0.6
