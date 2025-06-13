@@ -1,8 +1,7 @@
 streamlit
 pandas
 numpy
-plotly.express
-plotly.graph_objects
+plotly
 wordcloud
 glob
 os
