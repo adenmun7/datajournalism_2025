@@ -1,0 +1,9 @@
+streamlit
+pandas
+numpy
+plotly.express
+plotly.graph_objects
+wordcloud
+glob
+os
+streamlit-plotly-events
