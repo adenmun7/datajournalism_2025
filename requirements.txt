@@ -3,6 +3,4 @@ pandas
 numpy
 plotly
 wordcloud
-glob
-os
 streamlit-plotly-events
