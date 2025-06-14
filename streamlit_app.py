@@ -7,8 +7,6 @@ from wordcloud import WordCloud
 import glob
 from streamlit_plotly_events import plotly_events
 import os
-from sklearn.decomposition import PCA
-from sklearn.preprocessing import StandardScaler
 
 # 기본 설정
 st.set_page_config(page_title="미디어 편향성 분석")
@@ -46,19 +44,17 @@ def load_frequency_data(folder_path):
     return data_dict
 
 @st.cache_data
-def get_pca_figure(sentiment_df):
-    pivot_pca = sentiment_df.pivot_table(index='outlet', columns='topic', values='zscore', aggfunc='mean').fillna(0)
-    scaler = StandardScaler()
-    scaled_data = scaler.fit_transform(pivot_pca)
-    pca = PCA(n_components=2)
-    principal_components = pca.fit_transform(scaled_data)
-    pca_df = pd.DataFrame(data=principal_components, columns=['PC1', 'PC2'], index=pivot_pca.index)
-    
-    fig_pca = px.scatter(pca_df, x='PC1', y='PC2', text=pca_df.index, title="주제별 논조를 종합한 언론사 포지셔닝 맵")
-    fig_pca.update_traces(textposition='top center')
-    fig_pca.add_hline(y=0, line_width=1, line_dash="dot", line_color="grey")
-    fig_pca.add_vline(x=0, line_width=1, line_dash="dot", line_color="grey")
-    return fig_pca
+def get_pca_figure_from_csv():
+    try:
+        pca_df = pd.read_csv('pca_results.csv', index_col='outlet') # index_col 설정 중요
+        
+        fig_pca = px.scatter(pca_df, x='PC1', y='PC2', text=pca_df.index, title="주제별 논조를 종합한 언론사 포지셔닝 맵")
+        fig_pca.update_traces(textposition='top center')
+        fig_pca.add_hline(y=0, line_width=1, line_dash="dot", line_color="grey")
+        fig_pca.add_vline(x=0, line_width=1, line_dash="dot", line_color="grey")
+        return fig_pca
+    except FileNotFoundError:
+        return None
 
 sentiment_df = load_sentiment_data()
 stats_df = load_statistics_data()
@@ -180,5 +176,8 @@ st.markdown("---")
 # 7. PCA
 st.header("7. 언론사 포지셔닝 맵 (PCA 분석)")
 st.info("모든 주제에 대한 논조를 종합하여 언론사들의 상대적 위치(유사도)를 보여줍니다.")
-fig_pca = get_pca_figure(sentiment_df)
-st.plotly_chart(fig_pca, use_container_width=True)
+fig_pca = get_pca_figure_from_csv()
+if fig_pca:
+    st.plotly_chart(fig_pca, use_container_width=True)
+else:
+    st.warning("pca_results.csv 파일을 찾을 수 없습니다.")
