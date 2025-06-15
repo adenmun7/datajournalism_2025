@@ -9,14 +9,25 @@ from streamlit_plotly_events import plotly_events
 import os
 
 # 기본 설정
-st.set_page_config(page_title="미디어 편향성 분석")
+st.set_page_config(
+    page_title="감정분석을 활용한 미디어 편향성 분석",
+    layout="wide"
+)
+st.markdown("""
+<style>
+    .block-container {
+        max-width: 1200px;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 
 # 데이터 준비
 @st.cache_data
 def load_sentiment_data():
     try:
         df = pd.read_csv('sentiment.csv')
-        df.rename(columns={'주제': 'topic', '언론사': 'outlet', '감정점수': 'sentiment', 'zscore': 'zscore', 'URL': 'url'}, inplace=True)
+        df.rename(columns={'주제': 'topic', '언론사': 'outlet', '제목': 'title', '감정점수': 'sentiment', 'zscore': 'zscore', 'URL': 'url'}, inplace=True)
         return df
     except FileNotFoundError: return None
 
@@ -66,12 +77,83 @@ if sentiment_df is None:
 
 # ====================================================================================
 # ====================================================================================
-st.title("가제")
+
+st.title("감정분석을 통한 미디어 편향성 분석")
+st.markdown("### 데이터저널리즘 : 6팀")
 st.markdown("---")
+
+
+# ### 소개 섹션 ###
+with st.container(border=True):
+    st.header("프로젝트 소개")
+    st.markdown("""
+    본 프로젝트는 우리가 가진 언론사에 대한 직관적인 분류가 실제 데이터상에서 어떻게 나타나는지 확인하고자 기획되었습니다. \n
+    이를 위해 특정 사회적 갈등 사안에 대한 언론사별 '논조'를 데이터로 수치화하고, 다양한 시각화를 통해 그 차이와 패턴을 분석해 보았습니다.
+    """)
+
+    st.subheader("분석 데이터 개요")
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        with st.container(height=200, border=True):
+            st.markdown("<p style='text-align: center;'>분석 주제</p>", unsafe_allow_html=True)
+            st.markdown("<h2 style='text-align: center;'>3개</h2>", unsafe_allow_html=True)
+            st.caption("<p style='text-align: center; line-height: 1.5;'>탈원전<br>전국장애인차별철폐연대(전장연)<br>노조파업</p>", unsafe_allow_html=True)
+
+    with col2:
+        with st.container(height=200, border=True):
+            num_outlets = sentiment_df['outlet'].nunique()
+            st.markdown("<p style='text-align: center;'>분석 언론사</p>", unsafe_allow_html=True)
+            st.markdown(f"<h2 style='text-align: center;'>{num_outlets}곳</h2>", unsafe_allow_html=True)
+            # 언론사 목록을 작은 글씨로 표시
+            outlet_list_str = ", ".join(sentiment_df['outlet'].unique())
+            st.caption(f"<p style='text-align: center; line-height: 1.5;'>{outlet_list_str}</p>", unsafe_allow_html=True)
+
+    with col3:
+        with st.container(height=200, border=True):
+            st.markdown("<p style='text-align: center;'>총 수집 기사</p>", unsafe_allow_html=True)
+            st.markdown("<h2 style='text-align: center;'>6,940개</h2>", unsafe_allow_html=True)
+            st.caption("<p style='text-align: center; line-height: 1.5;'>&nbsp;</p>", unsafe_allow_html=True)
+
+    st.markdown("""
+    - **1. 감성 분석 (Sentiment Analysis)**
+        - ChatGPT API를 활용하여 6,940개 기사 본문 전체의 논조를 분석했습니다.
+        - 각 기사는 주제에 대해 얼마나 긍정적/부정적인지에 따라 **-1.0(부정) ~ +1.0(긍정)** 사이의 '감성 점수'를 부여받습니다.
+    """)
+
+    st.markdown("""
+    - **2. 데이터 표준화 (Standardization)**
+        - 주제별로 편향이 존재할 수 있으므로, 단순 감성 점수만으로는 객관적인 비교가 어렵습니다.
+        - 각 주제 내에서 기사들의 감성 점수를 Z-score(표준점수)로 변환하면, 논조의 '상대적인 강도'를 동일한 척도상에서 비교할 수 있습니다.
+    """)
+    with st.expander("Z-score 계산 공식 보기"):
+        st.latex(r"Z = \frac{(X - \mu)}{\sigma}")
+        st.caption(r"$X$: 개별 기사 점수, $\mu$: 해당 주제의 전체 기사 점수 평균, $\sigma$: 해당 주제의 전체 기사 점수 표준편차")
+
+    st.caption("▼ 실제 데이터 예시 (sentiment.csv)")
+    columns_to_show = ['topic', 'outlet', 'title', 'sentiment', 'zscore', 'url']
+    st.dataframe(sentiment_df[columns_to_show].head(3), use_container_width=True)
+st.markdown("---")
+# ### 소개 끝 ###
+
+# ====================================================================================
+# ====================================================================================
+
 
 # 1. wc
 st.header("1. 주제별/언론사별 주요 키워드 시각화")
+
 if freq_data:
+    max_words_slider = st.slider(
+        "표시할 최대 단어 개수를 선택하세요:", 
+        min_value=10,
+        max_value=200,
+        value=30,
+        step=10
+    )
+    # ---------------------------------------------
+    
     topic_list = sorted(list(freq_data.keys()))
     col1, col2 = st.columns(2)
     with col1:
@@ -80,13 +162,25 @@ if freq_data:
         if selected_topic_wc:
             available_outlets_wc = sorted(list(freq_data.get(selected_topic_wc, {}).keys()))
             selected_outlet_wc = st.selectbox("언론사 선택 (워드클라우드)", options=available_outlets_wc)
+
     if selected_topic_wc and selected_outlet_wc and freq_data.get(selected_topic_wc, {}).get(selected_outlet_wc):
         try:
-            wordcloud = WordCloud(font_path='SeoulHangangL.ttf', width=1200, height=800, background_color='white').generate_from_frequencies(freq_data[selected_topic_wc][selected_outlet_wc])
-            st.image(wordcloud.to_array(), caption=f"'{selected_outlet_wc}'의 '{selected_topic_wc}' 관련 주요 키워드")
-        except FileNotFoundError: st.error("폰트 파일(`SeoulHangangL.ttf`)이 없습니다.")
-        except Exception as e: st.warning(f"워드클라우드 오류: {e}")
-else: st.info("빈도수 데이터 로드 불가")
+            wordcloud = WordCloud(
+                font_path='SeoulHangangL.ttf', 
+                width=1200, 
+                height=800, 
+                background_color='white',
+                max_words=max_words_slider
+            ).generate_from_frequencies(freq_data[selected_topic_wc][selected_outlet_wc])
+            
+            st.image(wordcloud.to_array(), caption=f"'{selected_outlet_wc}'의 '{selected_topic_wc}' 관련 주요 키워드 (상위 {max_words_slider}개)")
+            
+        except FileNotFoundError: 
+            st.error("폰트 파일이 없습니다.")
+        except Exception as e: 
+            st.warning(f"워드클라우드 오류: {e}")
+else: 
+    st.info("빈도수 데이터 로드 불가")
 
 st.markdown("---")
 
@@ -103,7 +197,7 @@ st.markdown("---")
 
 # 3. heatmap
 st.header("3. 상호작용형 히트맵")
-n_articles = st.number_input(label="클릭 시 표시할 기사 수를 선택하세요:", min_value=1, max_value=20, value=3, step=1)
+n_articles = st.number_input(label="클릭 시 표시할 기사 수를 선택하세요:", min_value=1, max_value=200, value=10, step=1)
 pivot_df_heatmap = sentiment_df.pivot_table(index='topic', columns='outlet', values='zscore', aggfunc='mean')
 fig_heatmap = px.imshow(pivot_df_heatmap, aspect='auto', color_continuous_scale='RdBu_r', title="평균 z-score 히트맵")
 
@@ -126,10 +220,10 @@ if selected_points:
     if not subset_df.empty:
         closest_articles = subset_df.iloc[(subset_df['zscore'] - clicked_value).abs().argsort()[:n_articles]]
         st.subheader(f"'{clicked_outlet}'의 '{clicked_topic}' 관련 기사")
-        st.info(f"선택된 셀의 값({clicked_value:.2f})과 가장 유사한 점수의 기사 목록입니다.")
+        st.info(f"선택된 셀의 값({clicked_value:.2f})과 근접한 점수의 기사 목록입니다.")
         for _, row in closest_articles.iterrows():
             with st.container(border=True):
-                st.markdown(f"**URL**: [기사 링크]({row['url']}) (점수: {row['zscore']:.3f})")
+                st.markdown(f"**제목**: {row['title']} / [기사 링크]({row['url']}) (Z-Score: {row['zscore']:.3f})")
 
 st.markdown("---")
 
