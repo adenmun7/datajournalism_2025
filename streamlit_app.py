@@ -195,8 +195,32 @@ else: st.info("`statistics.csv` 파일이 없습니다.")
 
 st.markdown("---")
 
-# 3. heatmap
-st.header("3. 상호작용형 히트맵")
+# 3. bar
+st.header("3. 논조 유형별 기사 비율 분석")
+topic_for_stacked = st.selectbox("분석할 주제 선택:", sentiment_df['topic'].unique(), key='stacked_topic')
+if topic_for_stacked:
+    df_stacked = sentiment_df[sentiment_df['topic'] == topic_for_stacked].copy()
+    bins, labels = [-float('inf'), -0.5, 0.5, float('inf')], ['부정적', '중립적', '긍정적']
+    df_stacked['sentiment_category'] = pd.cut(df_stacked['zscore'], bins=bins, labels=labels)
+    category_counts = df_stacked.groupby(['outlet', 'sentiment_category']).size().reset_index(name='count')
+    if not category_counts.empty:
+        total_counts = category_counts.groupby('outlet')['count'].transform('sum')
+        category_counts['percentage'] = (category_counts['count'] / total_counts) * 100
+        fig_stacked = px.bar(category_counts, x='outlet', y='percentage', color='sentiment_category', title=f"'{topic_for_stacked}' 주제에 대한 언론사별 논조 유형 비율", labels={'outlet': '언론사', 'percentage': '기사 비율 (%)'}, color_discrete_map={'부정적': '#d62728', '중립적': '#7f7f7f', '긍정적': '#2ca02c'})
+        st.plotly_chart(fig_stacked, use_container_width=True)
+
+st.markdown("---")
+
+# 4. PCA
+st.header("4. PCA 분석")
+fig_pca = get_pca_figure_from_csv()
+if fig_pca:
+    st.plotly_chart(fig_pca, use_container_width=True)
+else:
+    st.warning("pca_results.csv 파일을 찾을 수 없습니다.")
+
+# 5. heatmap
+st.header("5. 상호작용형 히트맵")
 n_articles = st.number_input(label="클릭 시 표시할 기사 수를 선택하세요:", min_value=1, max_value=200, value=10, step=1)
 pivot_df_heatmap = sentiment_df.pivot_table(index='topic', columns='outlet', values='zscore', aggfunc='mean')
 fig_heatmap = px.imshow(pivot_df_heatmap, aspect='auto', color_continuous_scale='RdBu_r', title="평균 z-score 히트맵")
@@ -209,8 +233,8 @@ for topic in pivot_df_heatmap.index:
         value = pivot_df_heatmap.loc[topic, outlet]
         if pd.notna(value):
             font_color = 'white' if abs(value - z_mid) > (z_max - z_min) * 0.3 else 'black'
-            annotations.append(go.layout.Annotation(text=f"{value:.2f}", x=outlet, y=topic, xref='x', yref='y', showarrow=False, font=dict(color=font_color, size=10)))
-fig_heatmap.update_layout(annotations=annotations)
+            annotations.append(go.layout.Annotation(text=f"{value:.2f}", x=outlet, y=topic, xref='x', yref='y', showarrow=False, font=dict(color=font_color, size=15)))
+fig_heatmap.update_layout(annotations=annotations, height=700)
 
 selected_points = plotly_events(fig_heatmap, click_event=True, key="heatmap_click")
 if selected_points:
@@ -227,8 +251,8 @@ if selected_points:
 
 st.markdown("---")
 
-# 4. graph1
-st.header("4. 주제별 언론사 논조 분포 비교")
+# 6. graph1
+st.header("6. 주제별 언론사 논조 분포 비교")
 topic_to_compare = st.selectbox("비교할 주제를 선택하세요:", sentiment_df['topic'].unique())
 if topic_to_compare:
     df_topic = sentiment_df[sentiment_df['topic'] == topic_to_compare]
@@ -239,8 +263,8 @@ if topic_to_compare:
 
 st.markdown("---")
 
-# 5. graph2
-st.header("5. 언론사별 주제 논조 분포 비교")
+# 6. graph2
+st.header("6. 언론사별 주제 논조 분포 비교")
 outlet_to_compare = st.selectbox("비교할 언론사를 선택하세요:", sentiment_df['outlet'].unique())
 if outlet_to_compare:
     df_outlet = sentiment_df[sentiment_df['outlet'] == outlet_to_compare]
@@ -251,27 +275,45 @@ if outlet_to_compare:
 
 st.markdown("---")
 
-# 6. bar
-st.header("6. 논조 유형별 기사 비율 분석")
-topic_for_stacked = st.selectbox("분석할 주제 선택:", sentiment_df['topic'].unique(), key='stacked_topic')
-if topic_for_stacked:
-    df_stacked = sentiment_df[sentiment_df['topic'] == topic_for_stacked].copy()
-    bins, labels = [-float('inf'), -0.5, 0.5, float('inf')], ['부정적', '중립적', '긍정적']
-    df_stacked['sentiment_category'] = pd.cut(df_stacked['zscore'], bins=bins, labels=labels)
-    category_counts = df_stacked.groupby(['outlet', 'sentiment_category']).size().reset_index(name='count')
-    if not category_counts.empty:
-        total_counts = category_counts.groupby('outlet')['count'].transform('sum')
-        category_counts['percentage'] = (category_counts['count'] / total_counts) * 100
-        fig_stacked = px.bar(category_counts, x='outlet', y='percentage', color='sentiment_category', title=f"'{topic_for_stacked}' 주제에 대한 언론사별 논조 유형 비율", labels={'outlet': '언론사', 'percentage': '기사 비율 (%)'}, color_discrete_map={'부정적': '#d62728', '중립적': '#7f7f7f', '긍정적': '#2ca02c'})
-        st.plotly_chart(fig_stacked, use_container_width=True)
+# 7. conclusion
+# ====================================================================================
+# --- 최종 결론 섹션 (텍스트 중심) ---
+# ====================================================================================
 
 st.markdown("---")
+st.header("결론")
 
-# 7. PCA
-st.header("7. 언론사 포지셔닝 맵 (PCA 분석)")
-st.info("모든 주제에 대한 논조를 종합하여 언론사들의 상대적 위치(유사도)를 보여줍니다.")
-fig_pca = get_pca_figure_from_csv()
-if fig_pca:
-    st.plotly_chart(fig_pca, use_container_width=True)
-else:
-    st.warning("pca_results.csv 파일을 찾을 수 없습니다.")
+st.markdown("""
+본 프로젝트는 '보수', '진보'라는 우리의 직관적인 언론 분류가 실제 데이터에서 어떻게 나타나는지 확인하는 것에서 시작했습니다. 
+분석 결과, 언론 지형은 단순한 이분법을 넘어 더 복잡하고 다층적인 모습을 보여주었습니다.
+""")
+
+with st.container(border=True):
+    st.subheader("1: 큰 틀에서는 뚜렷한 '이념적 군집'이 존재한다")
+    st.markdown("""
+    **PCA 분석**에서 3가지 주제에 대한 모든 언론사의 논조를 종합했을 때, 지도상에서 크게 두 개의 그룹으로 나뉘고 있습니다. **히트맵**에서도 어느 정도의 경향성을 확인할 수 있습니다.
+                
+    이는 우리가 흔히 말하는 정치적 편향성의 구도가 데이터상에서 실재함을 보여주고 있습니다.
+    """)
+
+with st.container(border=True):
+    st.subheader("2: 그러나 모든 사안에 동일한 잣대를 들이대지 않는다")
+    st.markdown("""
+    하지만 **상호작용형 히트맵**을 통해 더 깊이 들여다보면, 언론사들이 모든 이슈에 대해 기계적으로 같은 수준의 편향성을 보이지는 않는다는 점을 발견할 수 있습니다.
+    
+    만약 한 언론사가 모든 사안에 동일한 강도의 논조를 보인다면, 히트맵의 한 행은 모두 같은 색으로 칠해져야 합니다. 하지만 실제로는 특정 언론사가 어떤 주제에는 매우 강한 긍정/부정(진한 색)을 보이지만, 어떤 주제에는 비교적 중립에 가까운(옅은 색) 태도를 보입니다. 
+    
+    이는 언론사가 가진 **기본적인 정치적 편향성과는 별개로, 개별 사안의 특성에 따라 논조의 '강도'와 '선명성'을 조절**하고 있음을 시사합니다.
+    """)
+
+
+# --- 최종 제언 ---
+st.subheader("최종 제언: '라벨'을 넘어 '프레임'을 읽는 미디어 리터러시")
+
+st.success("""
+**언론은 하나의 이념이나 정치적 선호에 완전히 구속되기보다는, 그것에 어느 정도만 호응하며 스스로 담론을 만들어내고 있습니다.**
+
+언론사들은 확실히 구별되는 진영을 구축하지만, 동시에 모든 사회 현상을 그것에만 의존해 서술하지는 않습니다. 각 사안의 복잡성 위에서 **사안별로 다른 '프레임'을 선택한다는 것입니다.**
+
+언론에 대해 **'보수', '진보'등과 같이 고정된 라벨로만 바라보는 시각을 넘어, ** 이 데이터가 보여주듯 **'어떤 사안에 대해, 어떤 근거로, 어떤 어휘를 사용해'** 특정 논조를 형성하는지를 비판적으로 살펴보는 미디어 리터러시가 필요하다고 하겠습니다. 본 프로젝트가 독자들이 주체적으로 정보를 소비하는 데 작게나마 도움이 되기를 바랍니다.
+""")
