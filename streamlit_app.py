@@ -233,8 +233,8 @@ for topic in pivot_df_heatmap.index:
         value = pivot_df_heatmap.loc[topic, outlet]
         if pd.notna(value):
             font_color = 'white' if abs(value - z_mid) > (z_max - z_min) * 0.3 else 'black'
-            annotations.append(go.layout.Annotation(text=f"{value:.2f}", x=outlet, y=topic, xref='x', yref='y', showarrow=False, font=dict(color=font_color, size=15)))
-fig_heatmap.update_layout(annotations=annotations, height=700)
+            annotations.append(go.layout.Annotation(text=f"{value:.2f}", x=outlet, y=topic, xref='x', yref='y', showarrow=False, font=dict(color=font_color, size=10)))
+fig_heatmap.update_layout(annotations=annotations)
 
 selected_points = plotly_events(fig_heatmap, click_event=True, key="heatmap_click")
 if selected_points:
@@ -308,14 +308,14 @@ with st.container(border=True):
 
 
 # --- 최종 제언 ---
-st.subheader("최종 제언: '프레임'을 읽는 미디어 리터러시")
+st.subheader("최종 제언: '라벨'을 넘어 '프레임'을 읽는 미디어 리터러시")
 
 st.success("""
 **언론은 하나의 이념이나 정치적 선호에 완전히 구속되기보다는, 그것에 어느 정도만 호응하며 스스로 담론을 만들어내고 있습니다.**
 
 언론사들은 확실히 구별되는 진영을 구축하지만, 동시에 모든 사회 현상을 그것에만 의존해 서술하지는 않습니다. 각 사안의 복잡성 위에서 **사안별로 다른 '프레임'을 선택한다는 것입니다.**
 
-언론에 대해 **'보수', '진보'등과 같이 고정된 라벨로만 바라보는 시각을 넘어,** 이 데이터가 보여주듯 **'어떤 사안에 대해, 어떤 근거로, 어떤 어휘를 사용해'** 특정 논조를 형성하는지를 비판적으로 살펴보는 미디어 리터러시가 필요하다고 하겠습니다. 
-           
+언론에 대해 **'보수', '진보'등과 같이 고정된 라벨로만 바라보는 시각을 넘어,** 이 데이터가 보여주듯 **'어떤 사안에 대해, 어떤 근거로, 어떤 어휘를 사용해'** 특정 논조를 형성하는지를 비판적으로 살펴보는 미디어 리터러시가 필요하다고 하겠습니다. \
+
 본 프로젝트가 독자들이 주체적으로 정보를 소비하는 데 작게나마 도움이 되기를 바랍니다.
 """)
