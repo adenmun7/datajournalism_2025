@@ -1,70 +1,96 @@
 import pandas as pd
-import os
+import requests
+from bs4 import BeautifulSoup
+import time
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import queue
 
-def merge_crawled_files_safely():
-    """
-    파일 목록을 먼저 확인하고, 3개의 CSV 파일을 안전하게 병합합니다.
-    """
-    # 1. 현재 폴더의 파일 목록을 출력하여 파일 존재 여부와 정확한 이름을 확인합니다.
+INPUT_FILE = "sentiment.csv"
+OUTPUT_FILE = "sentiment_with_titles_final_reused_driver.csv"
+MAX_REQUESTS_WORKERS = 15
+MAX_SELENIUM_WORKERS = 6
+
+PRESS_CONFIG = {
+    '중앙일보': {'method': 'requests', 'selectors': ['#article_title', 'h1.headline']},
+    '한겨레': {'method': 'requests', 'selectors': ['h3[class*="ArticleDetailView_title"]', 'h1.title', 'div.article_text h3.title']},
+    '오마이뉴스': {'method': 'requests', 'selectors': ['h2.article_tit a', 'h3.tit_view']},
+    '조선일보': {'method': 'selenium', 'selectors': ['h1[class*="article-header__headline"] span', 'h1.article-header__headline']}
+}
+
+HEADERS = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
+
+def find_title_from_soup(soup, selectors):
+    for selector in selectors:
+        element = soup.select_one(selector)
+        if element:
+            return element.get_text(strip=True)
+    return "제목 없음 (선택자 실패)"
+
+def fetch_with_requests(url, selectors):
     try:
-        print("현재 폴더에 있는 파일 목록:")
-        file_list_in_dir = os.listdir('.')
-        for f in file_list_in_dir:
-            print(f"- {f}")
-        print("-" * 50)
+        response = requests.get(url, headers=HEADERS, timeout=15)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, 'lxml')
+        return find_title_from_soup(soup, selectors)
     except Exception as e:
-        print(f"파일 목록을 읽는 중 에러 발생: {e}")
-        return
+        return f"제목 없음 (Requests 에러: {e.__class__.__name__})"
 
-    # 2. 병합할 파일들의 이름을 리스트로 정의합니다.
-    files_to_merge = [
-        "sentiment_동아일보_경향신문_연합뉴스.csv",
-        "sentiment_조선일보.csv",
-        "sentiment_중앙일보_한겨레_오마이뉴스.csv"
-    ]
+def selenium_worker(driver_queue, url, selectors):
+    driver = None
+    try:
+        driver = driver_queue.get()
+        driver.get(url)
+        time.sleep(3)
+        soup = BeautifulSoup(driver.page_source, 'lxml')
+        return find_title_from_soup(soup, selectors)
+    except Exception as e:
+        return f"제목 없음 (Selenium 에러: {e.__class__.__name__})"
+    finally:
+        if driver:
+            driver_queue.put(driver)
+
+def main():
+    df = pd.read_csv(INPUT_FILE)
+    df['제목'] = "처리 안함"
     
-    dataframes = {}
-    all_files_loaded = True
+    target_presses = list(PRESS_CONFIG.keys())
+    df_target = df[df['언론사'].isin(target_presses)].copy()
 
-    # 3. 각 파일을 개별적으로 불러옵니다.
-    print("파일을 하나씩 불러옵니다...")
-    for filename in files_to_merge:
-        try:
-            dataframes[filename] = pd.read_csv(filename)
-            print(f"[성공] '{filename}' 파일을 불러왔습니다.")
-        except FileNotFoundError:
-            print(f"[오류] '{filename}' 파일을 찾을 수 없습니다. 파일 이름과 업로드 상태를 확인해주세요.")
-            all_files_loaded = False
+    df_requests_list = [row for _, row in df_target.iterrows() if PRESS_CONFIG[row['언론사']]['method'] == 'requests']
+    df_selenium_list = [row for _, row in df_target.iterrows() if PRESS_CONFIG[row['언론사']]['method'] == 'selenium']
+
+    #
     
-    # 만약 파일 하나라도 불러오지 못했다면, 작업을 중단합니다.
-    if not all_files_loaded:
-        print("\n필요한 파일을 모두 불러오지 못했으므로 병합 작업을 중단합니다.")
-        return
+    if df_selenium_list:
+        driver_pool = queue.Queue()
+        for _ in range(MAX_SELENIUM_WORKERS):
+            options = webdriver.ChromeOptions()
+            options.add_argument('--headless'); options.add_argument('--log-level=3'); options.add_argument(f"user-agent={HEADERS['User-Agent']}")
+            service = Service(ChromeDriverManager().install())
+            driver_pool.put(webdriver.Chrome(service=service, options=options))
 
-    # 4. 모든 파일을 성공적으로 불러왔다면, 병합을 시작합니다.
-    print("\n모든 파일을 성공적으로 불러왔습니다. 병합을 시작합니다...")
+        with ThreadPoolExecutor(max_workers=MAX_SELENIUM_WORKERS) as executor:
+            future_to_index = {
+                executor.submit(selenium_worker, driver_pool, row['URL'], PRESS_CONFIG[row['언론사']]['selectors']): row.name
+                for row in df_selenium_list
+            }
+            for i, future in enumerate(as_completed(future_to_index)):
+                index = future_to_index[future]
+                df.loc[index, '제목'] = future.result()
+                print(f"  (selenium {i+1}/{len(df_selenium_list)}) [{df.loc[index, '언론사']}] 처리 완료")
+        
+        while not driver_pool.empty():
+            driver = driver_pool.get()
+            driver.quit()
+
+    print("처리 완료")
+
+    df.to_csv(OUTPUT_FILE, index=False, encoding='utf-8-sig')
     
-    # 첫 번째 데이터프레임을 기준으로 삼습니다.
-    df_final = dataframes[files_to_merge[0]].copy()
+    print("크롤링 완료")
 
-    # 두 번째, 세 번째 파일의 내용을 순서대로 덮어씁니다.
-    for filename in files_to_merge[1:]:
-        df_to_merge = dataframes[filename]
-        processed_rows = (df_to_merge['제목'] != '처리 안함') & (df_to_merge['제목'].notna())
-        df_final.loc[processed_rows, '제목'] = df_to_merge.loc[processed_rows, '제목']
-        print(f"- '{filename}'에서 {processed_rows.sum()}개의 제목을 병합했습니다.")
-
-    # 5. 최종 결과를 새 파일로 저장합니다.
-    output_filename = "sentiment_final_merged.csv"
-    df_final.to_csv(output_filename, index=False, encoding='utf-8-sig')
-
-    # 6. 완료 메시지와 요약을 출력합니다.
-    total_processed = (df_final['제목'] != '처리 안함') & (df_final['제목'].notna())
-    print("\n" + "="*50)
-    print("파일 병합이 성공적으로 완료되었습니다!")
-    print(f"최종 결과가 '{output_filename}' 파일에 저장되었습니다.")
-    print(f"총 {len(df_final)}개의 행 중 {total_processed.sum()}개의 제목이 채워졌습니다.")
-    print("="*50)
-
-# 함수 실행
-merge_crawled_files_safely()
+if __name__ == "__main__":
+    main()
